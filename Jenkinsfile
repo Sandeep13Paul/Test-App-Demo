@@ -38,14 +38,19 @@ spec:
                   git \
                   apt-transport-https \
                   ca-certificates \
-                  gnupg
+                  gnupg \
+                    python3 \
+                    python3-distutils \
 
                 # Install kubectl
                 curl -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
                 chmod +x kubectl
                 mv kubectl /usr/local/bin/
 
-                # Install gcloud SDK
+                # Fix python command (important)
+                ln -s /usr/bin/python3 /usr/bin/python
+
+                # Install gcloud
                 curl https://sdk.cloud.google.com | bash
 
                 export PATH=$PATH:/root/google-cloud-sdk/bin
