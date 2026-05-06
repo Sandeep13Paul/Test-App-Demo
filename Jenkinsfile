@@ -55,9 +55,9 @@ spec:
                     export GOOGLE_APPLICATION_CREDENTIALS=$GCP_KEY
 
                     gcloud auth activate-service-account \
-                      --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+                    --key-file=$GOOGLE_APPLICATION_CREDENTIALS
 
-                    gcloud config set projectgke-qa2-36938
+                    gcloud config set project gke-qa2-36938
 
                     gcloud container clusters get-credentials \
                       gke-qa2-sg1 \
