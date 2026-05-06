@@ -3,6 +3,8 @@ podTemplate(
 apiVersion: v1
 kind: Pod
 spec:
+  serviceAccountName: default   # 👈 explicitly define
+
   tolerations:
     - key: "role"
       operator: "Exists"
