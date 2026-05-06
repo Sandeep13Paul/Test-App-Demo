@@ -59,10 +59,7 @@ spec:
 
                     gcloud config set project gke-qa2-36938
 
-                    gcloud container clusters get-credentials \
-                      gke-qa2-sg1 \
-                      --zone asia-southeast1 \
-                      --project gke-qa2-36938
+                    gcloud container clusters get-credentials gke-qa2-sg1 --region asia-southeast1 --project gke-qa2-36938 --internal-ip
                     '''
                 }
             }
