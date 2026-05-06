@@ -12,7 +12,7 @@ spec:
 
   containers:
     - name: tools
-      image: ubuntu:22.04
+      image: google/cloud-sdk:latest
       command:
         - sleep
       args:
@@ -27,65 +27,41 @@ spec:
             checkout scm
         }
 
-        stage('Install Tools') {
+        stage('Setup Tools') {
             container('tools') {
                 sh '''
+                # Install kubectl (if not already present)
                 apt-get update
+                apt-get install -y curl
 
-                apt-get install -y \
-                  curl \
-                  unzip \
-                  git \
-                  apt-transport-https \
-                  ca-certificates \
-                  gnupg \
-                    python3 \
-                    python3-distutils \
-
-                # Install kubectl
                 curl -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
                 chmod +x kubectl
                 mv kubectl /usr/local/bin/
 
-                # Fix python command (important)
-                ln -s /usr/bin/python3 /usr/bin/python
+                # Ensure GKE auth plugin
+                gcloud components install gke-gcloud-auth-plugin -q || true
 
-                # Install gcloud
-                curl https://sdk.cloud.google.com | bash
-
-                export PATH=$PATH:/root/google-cloud-sdk/bin
-
-                gcloud version
                 kubectl version --client
+                gcloud version
                 '''
             }
         }
 
-        stage('Authenticate GCP') {
+        stage('Authenticate + Configure GKE') {
             container('tools') {
                 withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')]) {
                     sh '''
                     export GOOGLE_APPLICATION_CREDENTIALS=$GCP_KEY
 
-                    /root/google-cloud-sdk/bin/gcloud auth activate-service-account \
+                    gcloud auth activate-service-account \
                       --key-file=$GOOGLE_APPLICATION_CREDENTIALS
 
-                    /root/google-cloud-sdk/bin/gcloud config set project YOUR_PROJECT_ID
-                    '''
-                }
-            }
-        }
+                    gcloud config set project YOUR_PROJECT_ID
 
-        stage('Configure GKE Access') {
-            container('tools') {
-                withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')]) {
-                    sh '''
-                    export GOOGLE_APPLICATION_CREDENTIALS=$GCP_KEY
-
-                    /root/google-cloud-sdk/bin/gcloud container clusters get-credentials \
-                      YOUR_CLUSTER_NAME \
-                      --zone YOUR_ZONE \
-                      --project YOUR_PROJECT_ID
+                    gcloud container clusters get-credentials \
+                      gke-qa2-sg1 \
+                      --zone asia-southeast1 \
+                      --project gke-qa2-36938
 
                     kubectl get nodes
                     '''
