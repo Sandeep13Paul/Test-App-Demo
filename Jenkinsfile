@@ -3,6 +3,15 @@ podTemplate(
 apiVersion: v1
 kind: Pod
 spec:
+    tolerations:
+    - key: "role"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+    - key: "CriticalAddonsOnly"
+      operator: "Exists"
+
+      
   containers:
     - name: tools
       image: ubuntu:22.04
