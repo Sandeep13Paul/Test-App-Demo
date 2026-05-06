@@ -47,27 +47,27 @@ spec:
             }
         }
 
-        stage('Authenticate + Configure GKE') {
-            container('tools') {
-                withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')]) {
-                    sh '''
-                    export GOOGLE_APPLICATION_CREDENTIALS=$GCP_KEY
+        // stage('Authenticate + Configure GKE') {
+        //     container('tools') {
+        //         withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')]) {
+        //             sh '''
+        //             export GOOGLE_APPLICATION_CREDENTIALS=$GCP_KEY
 
-                    gcloud auth activate-service-account \
-                      --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+        //             gcloud auth activate-service-account \
+        //               --key-file=$GOOGLE_APPLICATION_CREDENTIALS
 
-                    gcloud config set project YOUR_PROJECT_ID
+        //             gcloud config set project YOUR_PROJECT_ID
 
-                    gcloud container clusters get-credentials \
-                      gke-qa2-sg1 \
-                      --zone asia-southeast1 \
-                      --project gke-qa2-36938
+        //             gcloud container clusters get-credentials \
+        //               gke-qa2-sg1 \
+        //               --zone asia-southeast1 \
+        //               --project gke-qa2-36938
 
-                    kubectl get nodes
-                    '''
-                }
-            }
-        }
+        //             kubectl get nodes
+        //             '''
+        //         }
+        //     }
+        // }
 
         stage('Deploy Application') {
             container('tools') {
