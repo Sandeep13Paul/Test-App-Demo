@@ -63,8 +63,6 @@ spec:
                       gke-qa2-sg1 \
                       --zone asia-southeast1 \
                       --project gke-qa2-36938
-
-                    kubectl get nodes
                     '''
                 }
             }
