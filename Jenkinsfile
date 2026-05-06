@@ -72,11 +72,11 @@ spec:
         stage('Deploy Application') {
             container('tools') {
                 sh '''
-                kubectl apply -n default -f k8s/deployment.yaml
-                kubectl apply -n default -f k8s/service.yaml
+                kubectl apply -n test-app -f k8s/deployment.yaml
+                kubectl apply -n test-app -f k8s/service.yaml
 
-                kubectl get pods -n default
-                kubectl get svc -n default
+                kubectl get pods -n test-app
+                kubectl get svc -n test-app
                 '''
             }
         }
