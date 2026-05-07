@@ -90,7 +90,19 @@ spec:
 
         stage('Deploy Application') {
             container('tools') {
-                if (params.ACTION == "deploy") {
+                def ACTION = params.ACTION
+
+                // If triggered by SCM (no user input), override from repo
+                if (!env.BUILD_USER) {
+                    ACTION = sh(
+                        script: "cat action.txt || echo deploy",
+                        returnStdout: true
+                    ).trim()
+                }
+    
+                echo "Final ACTION: ${ACTION}"
+                
+                if (ACTION == "deploy") {
                     sh """
                     echo "===== Applying ConfigMap ====="
                     
@@ -114,7 +126,7 @@ spec:
                     kubectl get svc -n ${params.NAMESPACE}
                     """
                 }
-                if (params.ACTION == "delete") {
+                if (ACTION == "delete") {
 
                     sh """
                     echo "===== Deleting from GKE ====="
