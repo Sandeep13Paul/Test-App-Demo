@@ -63,7 +63,7 @@ spec:
                 mv kubectl /usr/local/bin/
 
                 # Ensure GKE auth plugin
-                gcloud components install gke-gcloud-auth-plugin -q || true
+                sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin || true
 
                 kubectl version --client
                 gcloud version
