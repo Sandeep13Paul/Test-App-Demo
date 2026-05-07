@@ -18,17 +18,16 @@ data:
         *   "gcp";
     }
 
+    map $backend $target {
+        aws http://aws_backend;
+        gcp http://gcp_backend;
+    }
+
     server {
         listen 80;
 
         location / {
-            if ($backend = "aws") {
-                proxy_pass http://aws_backend;
-            }
-
-            if ($backend = "gcp") {
-                proxy_pass http://gcp_backend;
-            }
+            proxy_pass $target;
 
             add_header X-Selected-Backend $backend;
         }

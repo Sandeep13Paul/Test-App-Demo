@@ -121,8 +121,21 @@ spec:
                     kubectl apply -n ${params.NAMESPACE} \
                         -f k8s/deployment.yaml
 
+                    echo "===== Waiting for Pods ====="
+
+                    kubectl rollout status deployment nginx-app \
+                    -n ${params.NAMESPACE} --timeout=120s
+
                     kubectl apply -n ${params.NAMESPACE} \
                         -f k8s/service.yaml
+
+                    echo "===== Waiting for Service Endpoints ====="
+
+                    until kubectl get endpoints nginx-service -n ${params.NAMESPACE} \
+                    -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null; do
+                    echo "Waiting for endpoints..."
+                    sleep 5
+                    done
 
                     echo "===== Pods ====="
 
@@ -180,8 +193,19 @@ spec:
                         kubectl apply -n ${params.NAMESPACE} \
                         -f k8s/nginx-router-deployment.yaml
 
+                        kubectl rollout status deployment nginx-router \
+                            -n ${params.NAMESPACE} --timeout=120s
+
                         kubectl apply -n ${params.NAMESPACE} \
                         -f k8s/nginx-router-service.yaml
+
+                        echo "===== Waiting for Service Endpoints ====="
+
+                        until kubectl get endpoints nginx-router-service -n ${params.NAMESPACE} \
+                        -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null; do
+                        echo "Waiting for endpoints..."
+                        sleep 5
+                        done
 
                         echo "===== Router Service ====="
 
