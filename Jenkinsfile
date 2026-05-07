@@ -92,12 +92,16 @@ spec:
             container('tools') {
                 def ACTION = params.ACTION
 
-                def commitMsg = sh(
-                  script: "git log -1 --pretty=%B",
-                  returnStdout: true
-                ).trim()
+                def commitMsg = currentBuild.changeSets
+                    .collect { it.items }
+                    .flatten()
+                    .collect { it.msg }
+                    .join("\n")
                 
-                ACTION = commitMsg.contains("delete") ? "delete" : "deploy"
+                echo "Commit Message: ${commitMsg}"
+                if (!params.ACTION) {
+                    ACTION = commitMsg.toLowerCase().contains("delete") ? "delete" : "deploy"
+                }
     
                 echo "Final ACTION: ${ACTION}"
                 
