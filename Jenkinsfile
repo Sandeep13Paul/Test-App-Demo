@@ -97,12 +97,16 @@ spec:
                     .flatten()
                     .collect { it.msg }
                     .join("\n")
-                
+                    .trim()
+                    .toLowerCase()
+
                 echo "Commit Message: ${commitMsg}"
-                if (!params.ACTION) {
-                    ACTION = commitMsg.toLowerCase().contains("delete") ? "delete" : "deploy"
+
+                // 🔥 Only override for SCM trigger (no user input)
+                if (!env.BUILD_USER) {
+                    ACTION = commitMsg.contains("delete") ? "delete" : "deploy"
                 }
-    
+
                 echo "Final ACTION: ${ACTION}"
                 
                 if (ACTION == "deploy") {
