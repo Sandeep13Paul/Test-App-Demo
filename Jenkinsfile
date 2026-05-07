@@ -142,12 +142,59 @@ node(POD_LABEL) {
                     }
                 }
 
-                // ================= DELETE =================
-                if (params.ACTION == "delete") {
-                    sh """
-                    kubectl delete -n ${params.NAMESPACE} -f k8s/deployment.yaml || true
-                    kubectl delete -n ${params.NAMESPACE} -f k8s/service.yaml || true
-                    """
+                // ===== AWS DELETE =====
+                if (params.CLOUD_PROVIDER == "aws") {
+
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-creds'
+                    ]]) {
+
+                        sh """
+                        echo "===== Deleting from AWS ====="
+
+                        aws eks update-kubeconfig \
+                        --region ap-southeast-1 \
+                        --name hello-cluster
+
+                        kubectl delete -n ${params.NAMESPACE} \
+                        -f k8s/deployment.yaml || true
+
+                        kubectl delete -n ${params.NAMESPACE} \
+                        -f k8s/service.yaml || true
+                        """
+                    }
+                }
+
+                // ===== GCP DELETE =====
+                if (params.CLOUD_PROVIDER == "gcp") {
+
+                    withCredentials([
+                        file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')
+                    ]) {
+
+                        sh """
+                        echo "===== Deleting from GCP ====="
+
+                        export GOOGLE_APPLICATION_CREDENTIALS=\$GCP_KEY
+
+                        gcloud auth activate-service-account \
+                        --key-file=\$GOOGLE_APPLICATION_CREDENTIALS
+
+                        gcloud config set project gke-qa2-36938
+
+                        gcloud container clusters get-credentials gke-qa2-sg1 \
+                        --zone asia-southeast1 \
+                        --project gke-qa2-36938 \
+                        --internal-ip
+
+                        kubectl delete -n ${params.NAMESPACE} \
+                        -f k8s/deployment.yaml || true
+
+                        kubectl delete -n ${params.NAMESPACE} \
+                        -f k8s/service.yaml || true
+                        """
+                    }
                 }
             }
         }
