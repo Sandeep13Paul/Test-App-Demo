@@ -26,3 +26,19 @@ spec:
       - name: config
         configMap:
           name: nginx-router-config
+
+      tolerations:
+        - key: role
+          operator: Equal
+          value: app-1323-std
+          effect: NoSchedule
+
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - key: role
+                  operator: In
+                  values:
+                    - app-1323-std
