@@ -136,8 +136,6 @@ node(POD_LABEL) {
                         kubectl apply -n ${params.NAMESPACE} -f k8s/deployment.yaml
                         kubectl apply -n ${params.NAMESPACE} -f k8s/service.yaml
 
-                        kubectl scale deployment hello-app --replicas=1 -n ${params.NAMESPACE}
-
                         kubectl rollout status deployment hello-app -n ${params.NAMESPACE} --timeout=180s
                         kubectl wait --for=condition=available deployment/hello-app -n ${params.NAMESPACE} --timeout=180s
                         """

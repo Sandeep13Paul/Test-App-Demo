@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nginx-router
-  namespace: test-app
 spec:
   replicas: 1
   selector:
@@ -42,4 +41,3 @@ spec:
                   operator: In
                   values:
                     - app-1323-std
-                    
