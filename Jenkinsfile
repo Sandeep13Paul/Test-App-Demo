@@ -70,15 +70,15 @@ spec:
                 sh """
                 echo "===== Applying ConfigMap ====="
                 
-                kubectl apply -n ${params.NAMESPACE} \
-                  -f k8s/configmap-${params.CLOUD_PROVIDER}.yaml
+                kubectl apply -n test-app \
+                  -f k8s/configmap-gcp.yaml
                 
                 echo "===== Deploying App ====="
                 
-                kubectl apply -n ${params.NAMESPACE} \
+                kubectl apply -n test-app \
                   -f k8s/deployment.yaml
                 
-                kubectl apply -n ${params.NAMESPACE} \
+                kubectl apply -n test-app \
                   -f k8s/service.yaml
 
                 kubectl get pods -n test-app
