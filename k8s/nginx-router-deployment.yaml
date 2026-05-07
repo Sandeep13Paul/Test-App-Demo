@@ -42,3 +42,4 @@ spec:
                   operator: In
                   values:
                     - app-1323-std
+                    
