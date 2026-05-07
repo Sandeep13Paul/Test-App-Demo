@@ -92,13 +92,12 @@ spec:
             container('tools') {
                 def ACTION = params.ACTION
 
-                // If triggered by SCM (no user input), override from repo
-                if (!env.BUILD_USER) {
-                    ACTION = sh(
-                        script: "cat action.txt || echo deploy",
-                        returnStdout: true
-                    ).trim()
-                }
+                def commitMsg = sh(
+                  script: "git log -1 --pretty=%B",
+                  returnStdout: true
+                ).trim()
+                
+                ACTION = commitMsg.contains("delete") ? "delete" : "deploy"
     
                 echo "Final ACTION: ${ACTION}"
                 
