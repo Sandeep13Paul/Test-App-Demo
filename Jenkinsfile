@@ -109,8 +109,6 @@ node(POD_LABEL) {
                         kubectl apply -n ${params.NAMESPACE} -f k8s/deployment.yaml
                         kubectl apply -n ${params.NAMESPACE} -f k8s/service.yaml
 
-                        kubectl scale deployment hello-app --replicas=1 -n ${params.NAMESPACE}
-
                         kubectl rollout status deployment hello-app -n ${params.NAMESPACE} --timeout=180s
                         kubectl wait --for=condition=available deployment/hello-app -n ${params.NAMESPACE} --timeout=180s
                         """
@@ -201,12 +199,22 @@ def scaleDownGCP() {
     withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')]) {
         sh """
         echo "Scaling down GCP AFTER success"
-        export GOOGLE_APPLICATION_CREDENTIALS=$GCP_KEY
-        gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+
+        export GOOGLE_APPLICATION_CREDENTIALS=\$GCP_KEY
+
+        gcloud auth activate-service-account \
+          --key-file=\$GOOGLE_APPLICATION_CREDENTIALS
+
         gcloud config set project gke-qa2-36938
+
         gcloud container clusters get-credentials gke-qa2-sg1 \
-          --zone asia-southeast1 --project gke-qa2-36938 --internal-ip
-        kubectl scale deployment hello-app --replicas=0 -n ${params.NAMESPACE} || true
+          --zone asia-southeast1 \
+          --project gke-qa2-36938 \
+          --internal-ip
+
+        kubectl scale deployment hello-app \
+          --replicas=0 \
+          -n ${params.NAMESPACE} || true
         """
     }
 }
