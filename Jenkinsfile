@@ -12,7 +12,7 @@ podTemplate(
 apiVersion: v1
 kind: Pod
 spec:
-    tolerations:
+  tolerations:
     - key: "role"
       operator: "Exists"
       effect: "NoSchedule"
