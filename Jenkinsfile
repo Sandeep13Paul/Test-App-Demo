@@ -1,3 +1,26 @@
+properties([
+    parameters([
+
+        choice(
+            name: 'CLOUD_PROVIDER',
+            choices: ['gcp'],
+            description: 'Choose cloud provider'
+        ),
+
+        string(
+            name: 'NAMESPACE',
+            defaultValue: 'test-app',
+            description: 'Kubernetes namespace'
+        ),
+
+        choice(
+            name: 'ACTION',
+            choices: ['deploy', 'delete'],
+            description: 'Choose action'
+        )
+    ])
+])
+
 podTemplate(
     yaml: '''
 apiVersion: v1
@@ -67,23 +90,42 @@ spec:
 
         stage('Deploy Application') {
             container('tools') {
-                sh """
-                echo "===== Applying ConfigMap ====="
-                
-                kubectl apply -n test-app \
-                  -f k8s/configmap-gcp.yaml
-                
-                echo "===== Deploying App ====="
-                
-                kubectl apply -n test-app \
-                  -f k8s/deployment.yaml
-                
-                kubectl apply -n test-app \
-                  -f k8s/service.yaml
+                if (params.ACTION == "deploy") {
+                    sh """
+                    echo "===== Applying ConfigMap ====="
+                    
+                    kubectl apply -n test-app \
+                      -f k8s/configmap-gcp.yaml
+                    
+                    echo "===== Deploying to GKE ====="
 
-                kubectl get pods -n test-app
-                kubectl get svc -n test-app
-                """
+                    kubectl apply -n ${params.NAMESPACE} \
+                        -f k8s/deployment.yaml
+
+                    kubectl apply -n ${params.NAMESPACE} \
+                        -f k8s/service.yaml
+
+                    echo "===== Pods ====="
+
+                    kubectl get pods -n ${params.NAMESPACE}
+
+                    echo "===== Services ====="
+
+                    kubectl get svc -n ${params.NAMESPACE}
+                    """
+                }
+                if (params.ACTION == "delete") {
+
+                    sh """
+                    echo "===== Deleting from GKE ====="
+
+                    kubectl delete -n ${params.NAMESPACE} \
+                        -f k8s/deployment.yaml || true
+
+                    kubectl delete -n ${params.NAMESPACE} \
+                        -f k8s/service.yaml || true
+                    """
+                }
             }
         }
     }
