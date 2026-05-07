@@ -1,18 +1,16 @@
 properties([
+    disableConcurrentBuilds(),
     parameters([
-
         choice(
             name: 'CLOUD_PROVIDER',
-            choices: ['gcp'],
+            choices: ['aws', 'gcp'],
             description: 'Choose cloud provider'
         ),
-
         string(
             name: 'NAMESPACE',
-            defaultValue: 'test-app',
+            defaultValue: 'default',
             description: 'Kubernetes namespace'
         ),
-
         choice(
             name: 'ACTION',
             choices: ['deploy', 'delete'],
@@ -26,210 +24,236 @@ podTemplate(
 apiVersion: v1
 kind: Pod
 spec:
-
-  tolerations:
-    - key: "role"
-      operator: "Exists"
-      effect: "NoSchedule"
-    - key: "CriticalAddonsOnly"
-      operator: "Exists"
-
   containers:
     - name: tools
       image: google/cloud-sdk:latest
-      command:
-        - sleep
-      args:
-        - "999999"
+      command: ["sleep"]
+      args: ["999999"]
       tty: true
 '''
 ) {
 
-    node(POD_LABEL) {
+node(POD_LABEL) {
 
-        stage('Checkout') {
-            checkout scm
-        }
+    stage('Checkout') {
+        checkout scm
+    }
 
-        stage('Setup Tools') {
-            container('tools') {
+    stage('Install Tools') {
+        container('tools') {
+            sh '''
+            apt-get update
+            apt-get install -y curl unzip git
+
+            curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
+            chmod +x kubectl
+            mv kubectl /usr/local/bin/
+
+            kubectl version --client
+            '''
+
+            if (params.CLOUD_PROVIDER == "aws") {
                 sh '''
-                # Install kubectl (if not already present)
-                apt-get update
-                apt-get install -y curl
+                curl https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
+                unzip awscliv2.zip
+                ./aws/install || true
+                aws --version
+                '''
+            }
 
-                curl -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
-                chmod +x kubectl
-                mv kubectl /usr/local/bin/
-
-                # Ensure GKE auth plugin
-                sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin || true
-
-                kubectl version --client
+            if (params.CLOUD_PROVIDER == "gcp") {
+                sh '''
+                gcloud components install gke-gcloud-auth-plugin -q || true
                 gcloud version
                 '''
             }
         }
+    }
 
-        stage('Authenticate + Configure GKE') {
-            container('tools') {
-                withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')]) {
-                    sh '''
-                    export GOOGLE_APPLICATION_CREDENTIALS=$GCP_KEY
+    stage('Configure Cluster Access') {
+        container('tools') {
+            script {
 
-                    gcloud auth activate-service-account \
-                    --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+                if (params.CLOUD_PROVIDER == "aws") {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-creds'
+                    ]]) {
 
-                    gcloud config set project gke-qa2-36938
+                        sh '''
+                        aws eks update-kubeconfig \
+                          --region ap-southeast-1 \
+                          --name hello-cluster
 
-                    gcloud container clusters get-credentials gke-qa2-sg1 --region asia-southeast1 --project gke-qa2-36938 --internal-ip
-                    '''
+                        kubectl get nodes
+                        '''
+                    }
+                }
+
+                if (params.CLOUD_PROVIDER == "gcp") {
+                    withCredentials([
+                        file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')
+                    ]) {
+
+                        sh '''
+                        export GOOGLE_APPLICATION_CREDENTIALS=$GCP_KEY
+
+                        gcloud auth activate-service-account \
+                          --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+
+                        gcloud config set project gke-qa2-36938
+
+                        gcloud container clusters get-credentials \
+                          gke-qa2-sg1 \
+                          --zone asia-southeast1 \
+                          --project gke-qa2-36938 \
+                          --internal-ip
+
+                        kubectl get nodes
+                        '''
+                    }
                 }
             }
         }
+    }
 
-        stage('Deploy Application') {
-            container('tools') {
-                def ACTION = params.ACTION
+    stage('Deploy/Delete Application') {
+        container('tools') {
+            script {
 
-                def commitMsg = currentBuild.changeSets
-                    .collect { it.items }
-                    .flatten()
-                    .collect { it.msg }
-                    .join("\n")
-                    .trim()
-                    .toLowerCase()
+                if (params.ACTION == "deploy") {
 
-                echo "Commit Message: ${commitMsg}"
-
-                // 🔥 Only override for SCM trigger (no user input)
-                if (!env.BUILD_USER) {
-                    ACTION = commitMsg.contains("delete") ? "delete" : "deploy"
-                }
-
-                echo "Final ACTION: ${ACTION}"
-                
-                if (ACTION == "deploy") {
                     sh """
-                    echo "===== Applying ConfigMap ====="
-                    
-                    kubectl apply -n test-app \
-                      -f k8s/configmap-gcp.yaml
-                    
-                    echo "===== Deploying to GKE ====="
+                    echo "===== Deploying Application ====="
 
-                    kubectl apply -n ${params.NAMESPACE} \
-                        -f k8s/deployment.yaml
+                    kubectl apply -n ${params.NAMESPACE} -f k8s/deployment.yaml
+                    kubectl apply -n ${params.NAMESPACE} -f k8s/service.yaml
 
-                    echo "===== Waiting for Pods ====="
+                    kubectl scale deployment hello-app \
+                      --replicas=1 -n ${params.NAMESPACE}
 
-                    kubectl rollout status deployment nginx-app \
-                    -n ${params.NAMESPACE} --timeout=120s
+                    echo "===== Waiting for rollout ====="
 
-                    kubectl apply -n ${params.NAMESPACE} \
-                        -f k8s/service.yaml
+                    kubectl rollout status deployment hello-app \
+                      -n ${params.NAMESPACE} --timeout=180s
 
-                    echo "===== Waiting for Service Endpoints ====="
-
-                    until kubectl get endpoints nginx-service -n ${params.NAMESPACE} \
-                    -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null; do
-                    echo "Waiting for endpoints..."
-                    sleep 5
-                    done
-
-                    echo "===== Pods ====="
-
-                    kubectl get pods -n ${params.NAMESPACE}
-
-                    echo "===== Services ====="
-
-                    kubectl get svc -n ${params.NAMESPACE}
+                    kubectl wait --for=condition=available \
+                      deployment/hello-app \
+                      -n ${params.NAMESPACE} --timeout=180s
                     """
+
+                    // ✅ Only after success
+                    scaleDownOtherCloud()
                 }
-                if (ACTION == "delete") {
 
+                if (params.ACTION == "delete") {
                     sh """
-                    echo "===== Deleting from GKE ====="
-
-                    kubectl delete -n ${params.NAMESPACE} \
-                        -f k8s/deployment.yaml || true
-
-                    kubectl delete -n ${params.NAMESPACE} \
-                        -f k8s/service.yaml || true
+                    kubectl delete -n ${params.NAMESPACE} -f k8s/deployment.yaml || true
+                    kubectl delete -n ${params.NAMESPACE} -f k8s/service.yaml || true
                     """
                 }
             }
         }
+    }
 
-        stage('Deploy Router (Split Traffic)') {
-            container('tools') {
-                script {
+    stage('Deploy Router (GCP Only)') {
+        container('tools') {
+            script {
 
-                    // reuse same ACTION logic
-                    def ACTION = params.ACTION
+                if (params.ACTION == "deploy" && params.CLOUD_PROVIDER == "gcp") {
 
-                    def commitMsg = currentBuild.changeSets
-                        .collect { it.items }
-                        .flatten()
-                        .collect { it.msg }
-                        .join("\n")
-                        .trim()
-                        .toLowerCase()
+                    sh """
+                    echo "===== Deploying NGINX Router ====="
 
-                    if (!env.BUILD_USER) {
-                        ACTION = commitMsg.contains("delete") ? "delete" : "deploy"
-                    }
+                    kubectl apply -n ${params.NAMESPACE} \
+                      -f k8s/nginx-router-config.yaml
 
-                    echo "Router ACTION: ${ACTION}"
+                    kubectl apply -n ${params.NAMESPACE} \
+                      -f k8s/nginx-router-deployment.yaml
 
-                    if (ACTION == "deploy") {
+                    kubectl rollout status deployment nginx-router \
+                      -n ${params.NAMESPACE} --timeout=120s
 
-                        sh """
-                        echo "===== Deploying NGINX Router ====="
+                    kubectl apply -n ${params.NAMESPACE} \
+                      -f k8s/nginx-router-service.yaml
 
-                        kubectl apply -n ${params.NAMESPACE} \
-                        -f k8s/nginx-router-config.yaml
+                    kubectl get svc nginx-router-service \
+                      -n ${params.NAMESPACE}
+                    """
+                }
 
-                        kubectl apply -n ${params.NAMESPACE} \
-                        -f k8s/nginx-router-deployment.yaml
+                if (params.ACTION == "delete" && params.CLOUD_PROVIDER == "gcp") {
+                    sh """
+                    kubectl delete -n ${params.NAMESPACE} \
+                      -f k8s/nginx-router-deployment.yaml || true
 
-                        kubectl rollout status deployment nginx-router \
-                            -n ${params.NAMESPACE} --timeout=120s
+                    kubectl delete -n ${params.NAMESPACE} \
+                      -f k8s/nginx-router-service.yaml || true
 
-                        kubectl apply -n ${params.NAMESPACE} \
-                        -f k8s/nginx-router-service.yaml
-
-                        echo "===== Waiting for Service Endpoints ====="
-
-                        until kubectl get endpoints nginx-router-service -n ${params.NAMESPACE} \
-                        -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null; do
-                        echo "Waiting for endpoints..."
-                        sleep 5
-                        done
-
-                        echo "===== Router Service ====="
-
-                        kubectl get svc nginx-router-service -n ${params.NAMESPACE}
-                        """
-                    }
-
-                    if (ACTION == "delete") {
-
-                        sh """
-                        echo "===== Deleting NGINX Router ====="
-
-                        kubectl delete -n ${params.NAMESPACE} \
-                        -f k8s/nginx-router-deployment.yaml || true
-
-                        kubectl delete -n ${params.NAMESPACE} \
-                        -f k8s/nginx-router-service.yaml || true
-
-                        kubectl delete -n ${params.NAMESPACE} \
-                        -f k8s/nginx-router-config.yaml || true
-                        """
-                    }
+                    kubectl delete -n ${params.NAMESPACE} \
+                      -f k8s/nginx-router-config.yaml || true
+                    """
                 }
             }
+        }
+    }
+}
+}
+
+
+// ================= SCALE DOWN LOGIC =================
+
+def scaleDownOtherCloud() {
+
+    // ===== Deploying to AWS → scale down GCP =====
+    if (params.CLOUD_PROVIDER == "aws") {
+
+        withCredentials([
+            file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')
+        ]) {
+
+            sh """
+            echo "===== Scaling down GCP AFTER SUCCESS ====="
+
+            export GOOGLE_APPLICATION_CREDENTIALS=$GCP_KEY
+
+            gcloud auth activate-service-account \
+              --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+
+            gcloud config set project gke-qa2-36938
+
+            gcloud container clusters get-credentials \
+              gke-qa2-sg1 \
+              --zone asia-southeast1 \
+              --project gke-qa2-36938 \
+              --internal-ip
+
+            kubectl scale deployment hello-app \
+              --replicas=0 -n ${params.NAMESPACE} || true
+            """
+        }
+    }
+
+    // ===== Deploying to GCP → scale down AWS =====
+    if (params.CLOUD_PROVIDER == "gcp") {
+
+        withCredentials([[
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: 'aws-creds'
+        ]]) {
+
+            sh """
+            echo "===== Scaling down AWS AFTER SUCCESS ====="
+
+            aws eks update-kubeconfig \
+              --region ap-southeast-1 \
+              --name hello-cluster
+
+            kubectl get nodes
+
+            kubectl scale deployment hello-app \
+              --replicas=0 -n ${params.NAMESPACE} || true
+            """
         }
     }
 }
