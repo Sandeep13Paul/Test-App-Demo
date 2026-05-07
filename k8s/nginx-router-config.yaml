@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-router-config
+  namespace: test-app
+data:
+  default.conf: |
+    upstream aws_backend {
+        server a1233e9bb05f44b39879222a5b9ec048-1063504046.ap-southeast-1.elb.amazonaws.com:80;
+    }
+
+    upstream gcp_backend {
+        server nginx-service.test-app.svc.cluster.local:80;
+    }
+
+    split_clients "$request_id" $backend {
+        50% "aws";
+        *   "gcp";
+    }
+
+    server {
+        listen 80;
+
+        location / {
+            if ($backend = "aws") {
+                proxy_pass http://aws_backend;
+            }
+
+            if ($backend = "gcp") {
+                proxy_pass http://gcp_backend;
+            }
+
+            add_header X-Selected-Backend $backend;
+        }
+    }

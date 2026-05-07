@@ -147,5 +147,65 @@ spec:
                 }
             }
         }
+
+        stage('Deploy Router (Split Traffic)') {
+            container('tools') {
+                script {
+
+                    // reuse same ACTION logic
+                    def ACTION = params.ACTION
+
+                    def commitMsg = currentBuild.changeSets
+                        .collect { it.items }
+                        .flatten()
+                        .collect { it.msg }
+                        .join("\n")
+                        .trim()
+                        .toLowerCase()
+
+                    if (!env.BUILD_USER) {
+                        ACTION = commitMsg.contains("delete") ? "delete" : "deploy"
+                    }
+
+                    echo "Router ACTION: ${ACTION}"
+
+                    if (ACTION == "deploy") {
+
+                        sh """
+                        echo "===== Deploying NGINX Router ====="
+
+                        kubectl apply -n ${params.NAMESPACE} \
+                        -f k8s/nginx-router-config.yaml
+
+                        kubectl apply -n ${params.NAMESPACE} \
+                        -f k8s/nginx-router-deployment.yaml
+
+                        kubectl apply -n ${params.NAMESPACE} \
+                        -f k8s/nginx-router-service.yaml
+
+                        echo "===== Router Service ====="
+
+                        kubectl get svc nginx-router-service -n ${params.NAMESPACE}
+                        """
+                    }
+
+                    if (ACTION == "delete") {
+
+                        sh """
+                        echo "===== Deleting NGINX Router ====="
+
+                        kubectl delete -n ${params.NAMESPACE} \
+                        -f k8s/nginx-router-deployment.yaml || true
+
+                        kubectl delete -n ${params.NAMESPACE} \
+                        -f k8s/nginx-router-service.yaml || true
+
+                        kubectl delete -n ${params.NAMESPACE} \
+                        -f k8s/nginx-router-config.yaml || true
+                        """
+                    }
+                }
+            }
+        }
     }
 }

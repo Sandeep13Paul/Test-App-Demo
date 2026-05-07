@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-router-service
+  namespace: test-app
+spec:
+  type: LoadBalancer
+  selector:
+    app: nginx-router
+  ports:
+    - port: 80
+      targetPort: 80
