@@ -11,12 +11,7 @@ data:
     upstream gcp_backend {
         server nginx-service.test-app.svc.cluster.local:80;
     }
-
-    split_clients "$request_id" $backend {
-        50% "aws";
-        *   "gcp";
-    }
-
+    
     map $backend $target {
         aws http://aws_backend;
         gcp http://gcp_backend;
